@@ -34,12 +34,7 @@
       <Filter>Source Files\Shader Files</Filter>
     </None>
     <None Include=".gitignore" />
-    <None Include="model.vert">
-      <Filter>Source Files\Shader Files</Filter>
-    </None>
-    <None Include="model.frag">
-      <Filter>Source Files\Shader Files</Filter>
-    </None>
+    <None Include="glsl basic.frag" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stb_image.h">

@@ -16,7 +16,7 @@
 
 #include "Util.h"
 
-// TinyObjLoader za .obj modele
+// TinyObjLoader for.obj models
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
@@ -241,18 +241,17 @@ static Mesh makeCylinder(float radius, float height, int slices, glm::vec4 col,
 
     return createMesh(v, idx);
 }   
-// Insert this function after makeCylinder(...) in main.cpp
 
-static Mesh makeThickCylinder(float outerRadius, float innerRadius, float height, int slices, glm::vec4 col) {
-    // Creates a thick-walled cylinder (closed annular volume) with top/bottom caps.
-    // outerRadius > innerRadius required.
+// Double-sided thick cylinder - works with culling enabled 
+static Mesh makeThickCylinderDoubleSided(float outerRadius, float innerRadius, float height, int slices, glm::vec4 col) {
     std::vector<Vertex> v;
     std::vector<unsigned int> idx;
 
     const float y0 = -height * 0.5f;
     const float y1 = height * 0.5f;
 
-    // Generate ring vertices (duplicate last = first for easy indexing)
+    // Generate ring vertices (4 per slice: outer bottom/top, inner bottom/top)
+    // These have RADIAL normals for side walls
     for (int i = 0; i <= slices; ++i) {
         float t = (float)i / (float)slices;
         float a = t * 2.0f * 3.1415926f;
@@ -264,65 +263,130 @@ static Mesh makeThickCylinder(float outerRadius, float innerRadius, float height
         float iz = std::sin(a) * innerRadius;
         glm::vec3 in = glm::normalize(glm::vec3(ix, 0.0f, iz));
 
-        // outer bottom, outer top, inner bottom, inner top
-        v.push_back({ {ox, y0, oz},  on, {t, 0}, col }); // outer bottom
-        v.push_back({ {ox, y1, oz},  on, {t, 1}, col }); // outer top
-        v.push_back({ {ix, y0, iz}, -in, {t, 0}, col }); // inner bottom (normal toward -radial)
-        v.push_back({ {ix, y1, iz}, -in, {t, 1}, col }); // inner top
+        // Outer wall vertices (normal pointing OUT)
+        v.push_back({ {ox, y0, oz},  on, {t, 0}, col }); // 0
+        v.push_back({ {ox, y1, oz},  on, {t, 1}, col }); // 1
+
+        // Inner wall vertices (normal pointing IN = -radial)
+        v.push_back({ {ix, y0, iz}, -in, {t, 0}, col }); // 2
+        v.push_back({ {ix, y1, iz}, -in, {t, 1}, col }); // 3
     }
 
-    // Build side faces (outer and inner)
+    // Build OUTER side (FRONT + BACK faces)
     for (int i = 0; i < slices; ++i) {
         int base = i * 4;
         int next = (i + 1) * 4;
 
         int ob0 = base + 0; int ot0 = base + 1;
-        int ib0 = base + 2; int it0 = base + 3;
         int ob1 = next + 0; int ot1 = next + 1;
-        int ib1 = next + 2; int it1 = next + 3;
 
-        // Outer side (front facing outward) - two triangles
+        // Front faces (viewed from outside)
         idx.push_back(ob0); idx.push_back(ot0); idx.push_back(ot1);
         idx.push_back(ob0); idx.push_back(ot1); idx.push_back(ob1);
 
-        // Inner side (front facing inward) - reverse winding so front faces inward
+        // BACK faces - same position , INVERTED winding, but the same normal!!!
+        int dupOb0 = (int)v.size(); v.push_back({ v[ob0].pos, v[ob0].nrm, v[ob0].uv, v[ob0].col });
+        int dupOt0 = (int)v.size(); v.push_back({ v[ot0].pos, v[ot0].nrm, v[ot0].uv, v[ot0].col });
+        int dupOt1 = (int)v.size(); v.push_back({ v[ot1].pos, v[ot1].nrm, v[ot1].uv, v[ot1].col });
+        int dupOb1 = (int)v.size(); v.push_back({ v[ob1].pos, v[ob1].nrm, v[ob1].uv, v[ob1].col });
+
+        // Reversed winding
+        idx.push_back(dupOb0); idx.push_back(dupOt1); idx.push_back(dupOt0);
+        idx.push_back(dupOb0); idx.push_back(dupOb1); idx.push_back(dupOt1);
+    }
+
+    // Build INNER side (FRONT + BACK faces)
+    for (int i = 0; i < slices; ++i) {
+        int base = i * 4;
+        int next = (i + 1) * 4;
+
+        int ib0 = base + 2; int it0 = base + 3;
+        int ib1 = next + 2; int it1 = next + 3;
+
+        // Front faces (viewed from inside)
         idx.push_back(ib0); idx.push_back(ib1); idx.push_back(it1);
         idx.push_back(ib0); idx.push_back(it1); idx.push_back(it0);
-    }
 
-    // Top cap (annulus) at y1: connect outer top -> inner top
+        // BACK faces - same normal as FRONT!
+        int dupIb0 = (int)v.size(); v.push_back({ v[ib0].pos, v[ib0].nrm, v[ib0].uv, v[ib0].col });
+        int dupIt0 = (int)v.size(); v.push_back({ v[it0].pos, v[it0].nrm, v[it0].uv, v[it0].col });
+        int dupIt1 = (int)v.size(); v.push_back({ v[it1].pos, v[it1].nrm, v[it1].uv, v[it1].col });
+        int dupIb1 = (int)v.size(); v.push_back({ v[ib1].pos, v[ib1].nrm, v[ib1].uv, v[ib1].col });
+
+        idx.push_back(dupIb0); idx.push_back(dupIt1); idx.push_back(dupIb1);
+        idx.push_back(dupIb0); idx.push_back(dupIt0); idx.push_back(dupIt1);
+    }
+    // Top cap (annulus) - same as side walls!
+    glm::vec3 upNrm(0, 1, 0);
+
     for (int i = 0; i < slices; ++i) {
-        int base = i * 4;
-        int next = (i + 1) * 4;
+        float t0 = (float)i / (float)slices;
+        float t1 = (float)(i + 1) / (float)slices;
+        float a0 = t0 * 2.0f * 3.1415926f;
+        float a1 = t1 * 2.0f * 3.1415926f;
 
-        int ot0 = base + 1;
-        int ot1 = next + 1;
-        int it0 = base + 3;
-        int it1 = next + 3;
+        glm::vec3 ot0Pos(std::cos(a0) * outerRadius, y1, std::sin(a0) * outerRadius);
+        glm::vec3 ot1Pos(std::cos(a1) * outerRadius, y1, std::sin(a1) * outerRadius);
+        glm::vec3 it0Pos(std::cos(a0) * innerRadius, y1, std::sin(a0) * innerRadius);
+        glm::vec3 it1Pos(std::cos(a1) * innerRadius, y1, std::sin(a1) * innerRadius);
 
-        // When looking from +Y, triangles must be CCW -> outer -> outer_next -> inner_next
-        idx.push_back(ot0); idx.push_back(ot1); idx.push_back(it1);
-        idx.push_back(ot0); idx.push_back(it1); idx.push_back(it0);
+        // FRONT vertices (UP normals)
+        int fOt0 = (int)v.size(); v.push_back({ ot0Pos, upNrm, {t0, 0}, col });
+        int fOt1 = (int)v.size(); v.push_back({ ot1Pos, upNrm, {t1, 0}, col });
+        int fIt0 = (int)v.size(); v.push_back({ it0Pos, upNrm, {t0, 1}, col });
+        int fIt1 = (int)v.size(); v.push_back({ it1Pos, upNrm, {t1, 1}, col });
+
+        // FRONT faces
+        idx.push_back(fOt0); idx.push_back(fOt1); idx.push_back(fIt1);
+        idx.push_back(fOt0); idx.push_back(fIt1); idx.push_back(fIt0);
+
+        // BACK vertices -same postions, same normals(UP), samo reversed winding!
+        int bOt0 = (int)v.size(); v.push_back({ v[fOt0].pos, v[fOt0].nrm, v[fOt0].uv, v[fOt0].col });
+        int bOt1 = (int)v.size(); v.push_back({ v[fOt1].pos, v[fOt1].nrm, v[fOt1].uv, v[fOt1].col });
+        int bIt0 = (int)v.size(); v.push_back({ v[fIt0].pos, v[fIt0].nrm, v[fIt0].uv, v[fIt0].col });
+        int bIt1 = (int)v.size(); v.push_back({ v[fIt1].pos, v[fIt1].nrm, v[fIt1].uv, v[fIt1].col });
+
+        // BACK faces - reversed winding
+        idx.push_back(bOt0); idx.push_back(bIt1); idx.push_back(bOt1);
+        idx.push_back(bOt0); idx.push_back(bIt0); idx.push_back(bIt1);
     }
 
-    // Bottom cap (annulus) at y0: connect inner bottom -> outer bottom (caps face -Y)
+    // Bottom cap (annulus) -same as side walls!
+    glm::vec3 downNrm(0, -1, 0);
+
     for (int i = 0; i < slices; ++i) {
-        int base = i * 4;
-        int next = (i + 1) * 4;
+        float t0 = (float)i / (float)slices;
+        float t1 = (float)(i + 1) / (float)slices;
+        float a0 = t0 * 2.0f * 3.1415926f;
+        float a1 = t1 * 2.0f * 3.1415926f;
 
-        int ob0 = base + 0;
-        int ob1 = next + 0;
-        int ib0 = base + 2;
-        int ib1 = next + 2;
+        glm::vec3 ob0Pos(std::cos(a0) * outerRadius, y0, std::sin(a0) * outerRadius);
+        glm::vec3 ob1Pos(std::cos(a1) * outerRadius, y0, std::sin(a1) * outerRadius);
+        glm::vec3 ib0Pos(std::cos(a0) * innerRadius, y0, std::sin(a0) * innerRadius);
+        glm::vec3 ib1Pos(std::cos(a1) * innerRadius, y0, std::sin(a1) * innerRadius);
 
-        // For bottom (looking from -Y), keep CCW when looking along -Y:
-        // inner -> inner_next -> outer_next
-        idx.push_back(ib0); idx.push_back(ib1); idx.push_back(ob1);
-        idx.push_back(ib0); idx.push_back(ob1); idx.push_back(ob0);
+        // FRONT vertices (DOWN normals)
+        int fOb0 = (int)v.size(); v.push_back({ ob0Pos, downNrm, {t0, 0}, col });
+        int fOb1 = (int)v.size(); v.push_back({ ob1Pos, downNrm, {t1, 0}, col });
+        int fIb0 = (int)v.size(); v.push_back({ ib0Pos, downNrm, {t0, 1}, col });
+        int fIb1 = (int)v.size(); v.push_back({ ib1Pos, downNrm, {t1, 1}, col });
+
+        // FRONT faces
+        idx.push_back(fOb1); idx.push_back(fOb0); idx.push_back(fIb0);
+        idx.push_back(fOb1); idx.push_back(fIb0); idx.push_back(fIb1);
+
+        // BACK vertices - same positions, same normals (DOWN), only reversed winding!
+        int bOb0 = (int)v.size(); v.push_back({ v[fOb0].pos, v[fOb0].nrm, v[fOb0].uv, v[fOb0].col });
+        int bOb1 = (int)v.size(); v.push_back({ v[fOb1].pos, v[fOb1].nrm, v[fOb1].uv, v[fOb1].col });
+        int bIb0 = (int)v.size(); v.push_back({ v[fIb0].pos, v[fIb0].nrm, v[fIb0].uv, v[fIb0].col });
+        int bIb1 = (int)v.size(); v.push_back({ v[fIb1].pos, v[fIb1].nrm, v[fIb1].uv, v[fIb1].col });
+
+        // BACK faces - reversed winding
+        idx.push_back(bOb0); idx.push_back(bIb0); idx.push_back(bOb1);
+        idx.push_back(bOb1); idx.push_back(bIb0); idx.push_back(bIb1);
     }
 
-    validateWinding(v, idx, "thickCylinder");
-    enforceCCW(v, idx, "thickCylinder");
+    validateWinding(v, idx, "thickCylinderDoubleSided");
     return createMesh(v, idx);
 }
 static Mesh makeDisk(float radius, int slices, glm::vec4 col, glm::vec3 normal, float y) {
@@ -406,7 +470,7 @@ static Mesh loadOBJ(const char* filepath, glm::vec4 defaultColor = glm::vec4(1, 
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
 
-    // Process all shapes
+    // Process all shapes - OBJ models already have correct CCW winding!
     for (const auto& shape : shapes) {
         for (const auto& index : shape.mesh.indices) {
             Vertex v;
@@ -418,7 +482,7 @@ static Mesh loadOBJ(const char* filepath, glm::vec4 defaultColor = glm::vec4(1, 
                 attrib.vertices[3 * index.vertex_index + 2]
             };
 
-            // Normal (ako postoji)
+            // Normal (if it exists)
             if (index.normal_index >= 0) {
                 v.nrm = {
                     attrib.normals[3 * index.normal_index + 0],
@@ -430,7 +494,7 @@ static Mesh loadOBJ(const char* filepath, glm::vec4 defaultColor = glm::vec4(1, 
                 v.nrm = { 0, 1, 0 }; // Default normal
             }
 
-            // UV (ako postoji)
+            // UV (if it exists)
             if (index.texcoord_index >= 0) {
                 v.uv = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
@@ -448,9 +512,9 @@ static Mesh loadOBJ(const char* filepath, glm::vec4 defaultColor = glm::vec4(1, 
         }
     }
 
+    // DO NOT flip winding - OBJ models are already correct!
     return createMesh(vertices, indices);
 }
-
 // -------------------------------
 // Camera + Input
 // -------------------------------
@@ -459,15 +523,15 @@ static bool firstMouse = true;
 static float lastX = 0.0f, lastY = 0.0f;
 static glm::vec3 cameraUp(0.0f, 1.0f, 0.0f);
 static float camSpeed = 2.5f; // units/sec
-static float yaw = -90.0f, pitch = -12.0f;     // gledaj malo naniže
-static glm::vec3 cameraPos(0.0f, 1.35f, 5.5f); // malo dalje i malo više
+static float yaw = -90.0f, pitch = -12.0f;     // look lower by default, to show more of the basin interior
+static glm::vec3 cameraPos(0.0f, 1.35f, 5.5f); // start a bit further back to show more of the scene, since we have a wide FOV
 static glm::vec3 cameraFront(0.0f, 0.0f, -1.0f);
-static float fov = 62.0f;                      // širi ugao
+static float fov = 62.0f;                      // wide FOV to show more of the scene, since camera is close to the basin
 
 
 static bool gDepthTest = true;
 static bool gCullFace = true;
-// New toggles: floor ("pod") and basin wall ("zid")
+//toggles: floor and basin wall 
 static bool gShowFloor = false;
 static bool gShowBasinWall = true;
 
@@ -600,7 +664,7 @@ static void drawThickLine2D(
     if (len < 1e-5f) return;
 
     glm::vec3 mid = (a + b) * 0.5f;
-    float ang = std::atan2(d.y, d.x); // rotacija u XY
+    float ang = std::atan2(d.y, d.x); // rotation in XY
 
     glUniform1i(glGetUniformLocation(prog, "uUseTex"), 0);
     glUniform1i(glGetUniformLocation(prog, "uEmissive"), 1);
@@ -657,9 +721,9 @@ int main() {
         return 2;
     }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(0); // frame limiter radimo sami
+    glfwSwapInterval(0); //frame manual
 
-// Sakrij kursor potpuno
+	// completely hide cursor and lock it to the window (for better camera control)
 glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
 glfwSetCursorPosCallback(window, mouse_callback);
@@ -670,11 +734,11 @@ glfwSetScrollCallback(window, scroll_callback);
         return 3;
     }
 
-    // Blending (za providnost)
+    // Blending (for transparency)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // 
+    //shaders 
     GLuint prog = createShader("basic.vert", "basic.frag");
     glUseProgram(prog);
     glUniform1i(glGetUniformLocation(prog, "uTex"), 0);
@@ -686,20 +750,7 @@ glfwSetScrollCallback(window, scroll_callback);
         std::cout << "PROGRAM LINK ERROR:\n" << log << "\n";
     }
 
-    // Cursor (daljinski) - ZAKOMENTARISANO, koristimo default cursor
-/*
-{
-    int cw, ch, cc;
-    unsigned char* px = stbi_load("res/cursor_remote.png", &cw, &ch, &cc, 4);
-    if (px) {
-        GLFWimage img{ cw, ch, px };
-        // laserska tačka treba da bude gore-levo
-        GLFWcursor* cur = glfwCreateCursor(&img, 2, 2);
-        if (cur) glfwSetCursor(window, cur);
-        stbi_image_free(px);
-    }
-}
-*/
+ 
 
     // Meshes
     Mesh cube = makeCube();
@@ -718,8 +769,7 @@ glfwSetScrollCallback(window, scroll_callback);
     Mesh lampSphere = makeSphere(1.0f, 10, 16, { 1,1,1,1 });
     Mesh dropletSphere = makeSphere(1.0f, 8, 12, { 1,1,1,1 });
     // Thick-walled basin (outer + inner + caps)
-    Mesh basinWall = makeThickCylinder(1.00f, 0.82f, 1.0f, 32, { 0.88f,0.88f,0.90f,1 }); // solid thickness
-
+    Mesh basinWall = makeThickCylinderDoubleSided(1.00f, 0.82f, 1.0f, 32, { 0.88f,0.88f,0.90f,1 });
     Mesh basinBottom = makeDisk(0.82f, 32, { 0.75f,0.75f,0.75f,1 }, { 0,1,0 }, -0.5f);
     
     Mesh waterTop = makeDisk(0.80f, 32, { 0.35f,0.75f,0.95f,0.55f }, { 0,1,0 }, 0.0f);
@@ -730,7 +780,8 @@ glfwSetScrollCallback(window, scroll_callback);
     Mesh toiletModel = loadOBJ("res/toilet.obj"); 
     // Textures
     GLuint texStudent = preprocessTexture("res/ime.png");
-    GLuint texRemote = preprocessTexture("res/remote.png");
+    
+    
 
     // Scene constants
 
@@ -744,7 +795,7 @@ glfwSetScrollCallback(window, scroll_callback);
     const glm::vec3 basinPos(ventPos.x, 0.65f, ventPos.z);
 
     // WC šolja IZA NAS - tamo gde se prosipa voda (iza klime, u pravcu +Z)
-    const glm::vec3 toiletPos(0.0f, 0.0f, 9.0f);  // Dalje na +Z (iza nas kad gledamo klim u)
+    const glm::vec3 toiletPos(0.0f,-1.0f, 9.0f);  // Dalje na +Z (iza nas kad gledamo klim u)
 
     const glm::vec3 lampPos = acPos + glm::vec3(0.42f, -0.12f, 0.56f); // lowered Y from -0.02 -> -0.12
 
@@ -1050,7 +1101,7 @@ setCommonUniforms(VP);
 // Keep lamp sphere emissive as before, but also provide its contribution to shading.
 {
     glm::vec3 lampLightColor = acOn ? glm::vec3(1.0f, 0.25f, 0.25f) : glm::vec3(0.0f);
-    float lampLightIntensity = acOn ? 0.35f : 0.0f; // "slabo" red light when on
+    float lampLightIntensity = acOn ? 0.08f : 0.0f; // "slabo" red light when on
 
     glUniform3fv(glGetUniformLocation(prog, "uLampPos"), 1, glm::value_ptr(lampPos));
     glUniform3fv(glGetUniformLocation(prog, "uLampColor"), 1, glm::value_ptr(lampLightColor));
@@ -1262,43 +1313,28 @@ if (gShowFloor) {
             }
         }
 
-        // Basin (thick cylinder) - either on floor or in hands (opaque geometry - walls & bottom)
+        // Basin (thick cylinder) - NORMALAN rendering BEZ hack-a
         {
             if (gShowBasinWall) {
-                // Basin needs two-sided rendering (inner + outer walls) ONLY when depth test is enabled.
-                // When depth test is OFF, X toggle should work normally on basin too.
-                GLboolean cullWas = glIsEnabled(GL_CULL_FACE);
-                if (gDepthTest && cullWas) {
-                    // Hack: disable culling for basin only when Z is ON
-                    glDisable(GL_CULL_FACE);
-                }
-                
+                // UKLONI ceo culling hack block!
                 drawMesh(basinWall, basinM, VP, { 0.88f,0.88f,0.90f,1 }, false, 0, 1.0f, false);
-                
-                // Restore culling state (only if we disabled it)
-                if (gDepthTest && cullWas) {
-                    glEnable(GL_CULL_FACE);
-                }
             }
-            // bottom always drawn with normal culling
             drawMesh(basinBottom, basinM, VP, { 0.75f,0.75f,0.75f,1 }, false, 0, 1.0f, false);
-        }
+}
 
         // Toilet behind (simple block model)
         {
             glm::mat4 M(1.0f);
             M = glm::translate(M, toiletPos);
 
-            // DODAJ ROTACIJE DA ISPRAVIM ORIJENTACIJU:
-            M = glm::rotate(M, glm::radians(180.0f), glm::vec3(0, 1, 0)); // Okreni ka kameri
-            // Ili probaj:
-            // M = glm::rotate(M, glm::radians(90.0f), glm::vec3(1, 0, 0)); // Podigni
-
+            
+            M = glm::rotate(M, glm::radians(180.0f), glm::vec3(0, 1, 0)); //turned to camera
+            
             M = glm::scale(M, glm::vec3(3.0f));
             drawMesh(toiletModel, M, VP, { 0.92f,0.92f,0.94f,1 }, false, 0, 1.0f, false);
         }
 
-        // Remote model - prikazan SAMO kada lavor NIJE u rukama, UVEK OKRENUT KA KLIMI
+        // Remote model - only when basin not in hands, turned to ac
         if (basinState != BasinState::InHands) {
             glm::vec3 right = glm::normalize(glm::cross(cameraFront, cameraUp));
             glm::vec3 up = glm::normalize(cameraUp);
@@ -1318,11 +1354,9 @@ if (gShowFloor) {
                 M = glm::rotate(M, remoteYaw, glm::vec3(0, 1, 0));
                 M = glm::rotate(M, remotePitch, glm::vec3(1, 0, 0));
 
-                // DODAJ ROTACIJE DA ISPRAVIM ORIJENTACIJU (probaj različite kombinacije):
-                M = glm::rotate(M, glm::radians(180.0f), glm::vec3(0, 1, 0)); // Okreni 180° oko Y
-                // Ili probaj:
-                // M = glm::rotate(M, glm::radians(90.0f), glm::vec3(1, 0, 0)); // Zaklon oko X
-                // M = glm::rotate(M, glm::radians(-90.0f), glm::vec3(0, 0, 1)); // Zaklon oko Z
+                
+                M = glm::rotate(M, glm::radians(180.0f), glm::vec3(0, 1, 0)); // turn 180° around Y
+                
 
                 M = glm::scale(M, glm::vec3(0.002f));
 
@@ -1439,12 +1473,11 @@ if (gShowFloor) {
     destroyMesh(quad);
     destroyMesh(lampSphere);
     destroyMesh(dropletSphere);
-    //destroyMesh(basinWallOuter);
     destroyMesh(basinWall);
     destroyMesh(basinBottom);
     destroyMesh(waterCyl);
     destroyMesh(waterTop);
-    destroyMesh(remoteModel);  // Dodaj
+    destroyMesh(remoteModel);  
     destroyMesh(toiletModel);
 
     glDeleteProgram(prog);

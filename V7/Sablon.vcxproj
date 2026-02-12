@@ -148,8 +148,7 @@
     <None Include=".gitignore" />
     <None Include="basic.frag" />
     <None Include="basic.vert" />
-    <None Include="model.frag" />
-    <None Include="model.vert" />
+    <None Include="glsl basic.frag" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
