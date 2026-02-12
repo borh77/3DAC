@@ -153,10 +153,8 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="mesh.hpp" />
-    <ClInclude Include="model.hpp" />
-    <ClInclude Include="shader.hpp" />
     <ClInclude Include="stb_image.h" />
+    <ClInclude Include="tiny_obj_loader.h" />
     <ClInclude Include="Util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

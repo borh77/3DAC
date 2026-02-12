@@ -16,8 +16,10 @@
 
 #include "Util.h"
 
-// stb_image samo za učitavanje PNG kursora (GLFW cursor)
-#include "stb_image.h"
+// TinyObjLoader za .obj modele
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
+
 
 // -------------------------------
 // Helpers
@@ -79,12 +81,12 @@ static void enforceCCW(std::vector<Vertex>& verts, std::vector<unsigned int>& id
         for (size_t i = 0; i + 2 < idx.size(); i += 3) {
             std::swap(idx[i + 1], idx[i + 2]); // flip winding
         }
-        std::cout << "WINDING FIX: mesh '" << name << "' had " << bad << " / " << total << " inward-facing; flipped all triangles to CCW\n";
+        //std::cout << "WINDING FIX: mesh '" << name << "' had " << bad << " / " << total << " inward-facing; flipped all triangles to CCW\n";
     }
 #ifndef NDEBUG
     else if (bad > 0) {
         // still warn in debug if there are any stray inverted triangles
-        std::cout << "WINDING WARNING: mesh '" << name << "' has " << bad << " / " << total << " inward-facing triangles\n";
+        //std::cout << "WINDING WARNING: mesh '" << name << "' has " << bad << " / " << total << " inward-facing triangles\n";
     }
 #endif
 }
@@ -157,7 +159,7 @@ static void validateWinding(const std::vector<Vertex>& verts, const std::vector<
         ++total;
     }
     if (total > 0 && bad > 0) {
-        std::cout << "WINDING WARNING: mesh '" << name << "' has " << bad << " / " << total << " triangles inward-facing\n";
+        //std::cout << "WINDING WARNING: mesh '" << name << "' has " << bad << " / " << total << " triangles inward-facing\n";
     }
 #endif
 }
@@ -388,6 +390,65 @@ static Mesh makeSphere(float r, int stacks, int slices, glm::vec4 col) {
     validateWinding(v, idx, "sphere");
     enforceCCW(v, idx, "sphere");
     return createMesh(v, idx);
+}
+// Load .obj model into existing Mesh structure
+static Mesh loadOBJ(const char* filepath, glm::vec4 defaultColor = glm::vec4(1, 1, 1, 1)) {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filepath)) {
+        std::cerr << "Failed to load " << filepath << ": " << err << std::endl;
+        return makeCube(defaultColor); // Fallback
+    }
+
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+
+    // Process all shapes
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            Vertex v;
+
+            // Position
+            v.pos = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            // Normal (ako postoji)
+            if (index.normal_index >= 0) {
+                v.nrm = {
+                    attrib.normals[3 * index.normal_index + 0],
+                    attrib.normals[3 * index.normal_index + 1],
+                    attrib.normals[3 * index.normal_index + 2]
+                };
+            }
+            else {
+                v.nrm = { 0, 1, 0 }; // Default normal
+            }
+
+            // UV (ako postoji)
+            if (index.texcoord_index >= 0) {
+                v.uv = {
+                    attrib.texcoords[2 * index.texcoord_index + 0],
+                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1] // Flip V
+                };
+            }
+            else {
+                v.uv = { 0, 0 };
+            }
+
+            v.col = defaultColor;
+
+            vertices.push_back(v);
+            indices.push_back((unsigned int)indices.size());
+        }
+    }
+
+    return createMesh(vertices, indices);
 }
 
 // -------------------------------
@@ -665,6 +726,8 @@ glfwSetScrollCallback(window, scroll_callback);
     Mesh waterCyl = makeCylinder(0.80f, 1.0f, 32, { 0.35f,0.75f,0.95f,0.55f }, false, 0.0f, false);
     
 
+    Mesh remoteModel = loadOBJ("res/remote.obj");
+    Mesh toiletModel = loadOBJ("res/toilet.obj"); 
     // Textures
     GLuint texStudent = preprocessTexture("res/ime.png");
     GLuint texRemote = preprocessTexture("res/remote.png");
@@ -1225,12 +1288,14 @@ if (gShowFloor) {
         {
             glm::mat4 M(1.0f);
             M = glm::translate(M, toiletPos);
-            M = glm::scale(M, glm::vec3(0.9f, 0.5f, 1.2f));
-            drawMesh(cube, M, VP, { 0.92f,0.92f,0.94f,1 }, false, 0, 1.0f, false);
-            glm::mat4 M2(1.0f);
-            M2 = glm::translate(M2, toiletPos + glm::vec3(0, 0.55f, -0.25f));
-            M2 = glm::scale(M2, glm::vec3(0.6f, 0.6f, 0.6f));
-            drawMesh(cube, M2, VP, { 0.92f,0.92f,0.94f,1 }, false, 0, 1.0f, false);
+
+            // DODAJ ROTACIJE DA ISPRAVIM ORIJENTACIJU:
+            M = glm::rotate(M, glm::radians(180.0f), glm::vec3(0, 1, 0)); // Okreni ka kameri
+            // Ili probaj:
+            // M = glm::rotate(M, glm::radians(90.0f), glm::vec3(1, 0, 0)); // Podigni
+
+            M = glm::scale(M, glm::vec3(3.0f));
+            drawMesh(toiletModel, M, VP, { 0.92f,0.92f,0.94f,1 }, false, 0, 1.0f, false);
         }
 
         // Remote model - prikazan SAMO kada lavor NIJE u rukama, UVEK OKRENUT KA KLIMI
@@ -1238,26 +1303,30 @@ if (gShowFloor) {
             glm::vec3 right = glm::normalize(glm::cross(cameraFront, cameraUp));
             glm::vec3 up = glm::normalize(cameraUp);
             glm::vec3 pos = cameraPos + cameraFront * 0.9f + right * 0.35f - up * 0.35f;
-            
-            // Izračunaj vektor od daljinskog ka klimi
+
             glm::vec3 toAC = acPos - pos;
             float distToAC = glm::length(toAC);
             if (distToAC > 0.0001f) {
-                toAC /= distToAC; // normalize
-                
-                // Izračunaj yaw i pitch iz vektora toAC
-                float remoteYaw = std::atan2(toAC.z, toAC.x) - glm::radians(90.0f); // -90° jer model gleda duž +Y
+                toAC /= distToAC;
+
+                float remoteYaw = std::atan2(toAC.z, toAC.x) - glm::radians(90.0f);
                 float remoteHorizDist = std::sqrt(toAC.x * toAC.x + toAC.z * toAC.z);
                 float remotePitch = std::atan2(toAC.y, remoteHorizDist);
-                
+
                 glm::mat4 M(1.0f);
                 M = glm::translate(M, pos);
-                // Prvo rotiraj oko Y (yaw)
                 M = glm::rotate(M, remoteYaw, glm::vec3(0, 1, 0));
-                // Zatim rotiraj oko lokalne X ose (pitch)
                 M = glm::rotate(M, remotePitch, glm::vec3(1, 0, 0));
-                M = glm::scale(M, glm::vec3(0.18f, 0.42f, 0.06f));
-                drawMesh(cube, M, VP, { 1,1,1,1 }, true, texRemote, 1.0f, false);
+
+                // DODAJ ROTACIJE DA ISPRAVIM ORIJENTACIJU (probaj različite kombinacije):
+                M = glm::rotate(M, glm::radians(180.0f), glm::vec3(0, 1, 0)); // Okreni 180° oko Y
+                // Ili probaj:
+                // M = glm::rotate(M, glm::radians(90.0f), glm::vec3(1, 0, 0)); // Zaklon oko X
+                // M = glm::rotate(M, glm::radians(-90.0f), glm::vec3(0, 0, 1)); // Zaklon oko Z
+
+                M = glm::scale(M, glm::vec3(0.002f));
+
+                drawMesh(remoteModel, M, VP, { 1,1,1,1 }, false, 0, 1.0f, false);
             }
         }
 
@@ -1375,6 +1444,8 @@ if (gShowFloor) {
     destroyMesh(basinBottom);
     destroyMesh(waterCyl);
     destroyMesh(waterTop);
+    destroyMesh(remoteModel);  // Dodaj
+    destroyMesh(toiletModel);
 
     glDeleteProgram(prog);
     glfwTerminate();
