@@ -145,7 +145,7 @@
     <ClCompile Include="Util.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include=".github\copilot-instructions.md" />
+    <None Include=".gitignore" />
     <None Include="basic.frag" />
     <None Include="basic.vert" />
     <None Include="packages.config" />

@@ -595,9 +595,11 @@ glfwSetScrollCallback(window, scroll_callback);
     const glm::vec3 ventPos = acPos + glm::vec3(0.0f, -0.28f, 0.55f);
 
     // lavor ispod vent-a (x,z poravnati)
-    const glm::vec3 basinPos(ventPos.x, 0.65f, ventPos.z    ); // +Z napred, da izađe iz klime
+    const glm::vec3 basinPos(ventPos.x, 0.65f, ventPos.z);
 
-    const glm::vec3 toiletPos(0.0f, 0.0f, 4.0f);
+    // WC šolja IZA NAS - tamo gde se prosipa voda (iza klime, u pravcu +Z)
+    const glm::vec3 toiletPos(0.0f, 0.0f, 9.0f);  // Dalje na +Z (iza nas kad gledamo klim u)
+
     const glm::vec3 lampPos = acPos + glm::vec3(0.42f, -0.12f, 0.56f); // lowered Y from -0.02 -> -0.12
 
     const float lampRadius = 0.04f;
@@ -696,281 +698,283 @@ glfwSetScrollCallback(window, scroll_callback);
         prev = now;
         dt = clampf(dt, 0.0f, 0.05f);
 
-        // PATCH 1: kretanje kamere (WASD + SPACE/SHIFT)
-        {
-            // kretanje po "podu" (XZ), da ne letiš kad gledaš gore/dole
-            glm::vec3 fwd = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
-            if (glm::length(fwd) < 0.0001f) fwd = glm::vec3(0, 0, -1);
-            glm::vec3 right = glm::normalize(glm::cross(fwd, cameraUp)); // cameraUp je (0,1,0)
-            float speed = camSpeed;
+        // ZAKOMENTARISANO: WASD/E/Q kretanje - koristimo samo mouse look
+/*
+// PATCH 1: kretanje kamere (WASD + SPACE/SHIFT)
+{
+    // kretanje po "podu" (XZ), da ne letiš kad gledaš gore/dole
+    glm::vec3 fwd = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
+    if (glm::length(fwd) < 0.0001f) fwd = glm::vec3(0, 0, -1);
+    glm::vec3 right = glm::normalize(glm::cross(fwd, cameraUp)); // cameraUp je (0,1,0)
+    float speed = camSpeed;
 
-            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 2.0f;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 2.0f;
 
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cameraPos += fwd * speed * dt;
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cameraPos -= fwd * speed * dt;
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cameraPos += right * speed * dt;
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cameraPos -= right * speed * dt;
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cameraPos += fwd * speed * dt;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cameraPos -= fwd * speed * dt;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cameraPos += right * speed * dt;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cameraPos -= right * speed * dt;
 
-            // PATCH 1: kretanje kamere (WASD + E/Q)  -- SPACE je rezervisan za akcije lavora
-            {
-                // kretanje po "podu" (XZ), da ne letiš kad gledaš gore/dole
-                glm::vec3 fwd = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
-                if (glm::length(fwd) < 0.0001f) fwd = glm::vec3(0, 0, -1);
-                glm::vec3 right = glm::normalize(glm::cross(fwd, cameraUp)); // cameraUp je (0,1,0)
-                float speed = camSpeed;
+    // PATCH 1: kretanje kamere (WASD + E/Q)  -- SPACE je rezervisan za akcije lavora
+    {
+        // kretanje po "podu" (XZ), da ne letiš kad gledaš gore/dole
+        glm::vec3 fwd = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
+        if (glm::length(fwd) < 0.0001f) fwd = glm::vec3(0, 0, -1);
+        glm::vec3 right = glm::normalize(glm::cross(fwd, cameraUp)); // cameraUp je (0,1,0)
+        float speed = camSpeed;
 
-                if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 2.0f;
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) speed *= 2.0f;
 
-                if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cameraPos += fwd * speed * dt;
-                if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cameraPos -= fwd * speed * dt;
-                if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cameraPos += right * speed * dt;
-                if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cameraPos -= right * speed * dt;
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cameraPos += fwd * speed * dt;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cameraPos -= fwd * speed * dt;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cameraPos += right * speed * dt;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cameraPos -= right * speed * dt;
 
-                // vertikalno (E gore, Q dole)
-                if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) cameraPos += cameraUp * speed * dt;
-                if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) cameraPos -= cameraUp * speed * dt;
+        // vertikalno (E gore, Q dole)
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) cameraPos += cameraUp * speed * dt;
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) cameraPos -= cameraUp * speed * dt;
 
-                // mali clamp da ne upadne ispod poda
-                cameraPos.y = std::max(0.25f, cameraPos.y);
-            }
+        // mali clamp da ne upadne ispod poda
+        cameraPos.y = std::max(0.25f, cameraPos.y);
+    }
 
+    // mali clamp da ne upadne ispod poda
+    cameraPos.y = std::max(0.25f, cameraPos.y);
+}
+*/
 
-            // mali clamp da ne upadne ispod poda
-            cameraPos.y = std::max(0.25f, cameraPos.y);
+// Desired temp input
+bool upDown = glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS;
+bool downDown = glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS;
+if (upDown && !upPrev) desiredTemp = std::min(40, desiredTemp + 1);
+if (downDown && !downPrev) desiredTemp = std::max(-10, desiredTemp - 1);
+upPrev = upDown; downPrev = downDown;
+
+// SPACE actions (edge)
+bool spaceDown = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+bool spaceEdge = spaceDown && !spacePrev;
+spacePrev = spaceDown;
+
+// Ray picking from camera center
+glm::vec3 ro = cameraPos;
+glm::vec3 rd = glm::normalize(cameraFront);
+
+// PATCH 2: click edge preko glfwGetMouseButton
+bool mouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+bool mouseEdge = mouseDown && !mousePrev;
+mousePrev = mouseDown;
+
+// Click interactions
+if (mouseEdge) {
+    float tHit = 0.0f;
+
+    
+   // Lamp toggle (only if basin not locked)
+    if (!acLocked) {
+        bool hitLamp = raySphere(ro, rd, lampPos, lampRadius * 2.2f, tHit); // 2.2x tolerancija
+
+        // fallback: ako si blizu klime i gledaš je (grubo), klik bilo gde pali/gasi
+        glm::vec3 toAC = acPos - ro;
+        float distAC = glm::length(toAC);
+        glm::vec3 toACn = (distAC > 0.0001f) ? (toAC / distAC) : glm::vec3(0, 0, -1);
+        float facingAC = glm::dot(rd, toACn);
+
+        bool nearAndFacing = (distAC < 6.0f) && (facingAC > 0.80f); // "olabavljeno" - možeš menjati
+
+        if (hitLamp || nearAndFacing) {
+            acOn = !acOn;
         }
-
-        // Desired temp input
-        bool upDown = glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS;
-        bool downDown = glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS;
-        if (upDown && !upPrev) desiredTemp = std::min(40, desiredTemp + 1);
-        if (downDown && !downPrev) desiredTemp = std::max(-10, desiredTemp - 1);
-        upPrev = upDown; downPrev = downDown;
-
-        // SPACE actions (edge)
-        bool spaceDown = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
-        bool spaceEdge = spaceDown && !spacePrev;
-        spacePrev = spaceDown;
-
-        // Ray picking from camera center
-        glm::vec3 ro = cameraPos;
-        glm::vec3 rd = glm::normalize(cameraFront);
-
-        // PATCH 2: click edge preko glfwGetMouseButton
-        bool mouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-        bool mouseEdge = mouseDown && !mousePrev;
-        mousePrev = mouseDown;
-
-        // Click interactions
-        if (mouseEdge) {
-            float tHit = 0.0f;
-
-            
-           // Lamp toggle (only if basin not locked)
-            if (!acLocked) {
-                bool hitLamp = raySphere(ro, rd, lampPos, lampRadius * 2.2f, tHit); // 2.2x tolerancija
-
-                // fallback: ako si blizu klime i gledaš je (grubo), klik bilo gde pali/gasi
-                glm::vec3 toAC = acPos - ro;
-                float distAC = glm::length(toAC);
-                glm::vec3 toACn = (distAC > 0.0001f) ? (toAC / distAC) : glm::vec3(0, 0, -1);
-                float facingAC = glm::dot(rd, toACn);
-
-                bool nearAndFacing = (distAC < 6.0f) && (facingAC > 0.80f); // "olabavljeno" - možeš menjati
-
-                if (hitLamp || nearAndFacing) {
-                    acOn = !acOn;
-                }
-            }
+    }
 
 
-            // If locked: click basin to pick it up
-            if (acLocked && basinState == BasinState::OnFloor) {
-                glm::vec3 basinPickCenter = basinPos + glm::vec3(0, 0.15f, 0);
-                if (raySphere(ro, rd, basinPickCenter, 0.6f, tHit)) {
-                    basinState = BasinState::InHands;
-                }
-            }
+    // If locked: click basin to pick it up
+    if (acLocked && basinState == BasinState::OnFloor) {
+        glm::vec3 basinPickCenter = basinPos + glm::vec3(0, 0.15f, 0);
+        if (raySphere(ro, rd, basinPickCenter, 0.6f, tHit)) {
+            basinState = BasinState::InHands;
         }
+    }
+}
 
-        // Flap animation
-        float flapTarget = (acOn ? 1.0f : 0.0f);
-        if (flap < flapTarget) flap = std::min(flapTarget, flap + flapSpeed * dt);
-        if (flap > flapTarget) flap = std::max(flapTarget, flap - flapSpeed * dt);
+// Flap animation
+float flapTarget = (acOn ? 1.0f : 0.0f);
+if (flap < flapTarget) flap = std::min(flapTarget, flap + flapSpeed * dt);
+if (flap > flapTarget) flap = std::max(flapTarget, flap - flapSpeed * dt);
 
-        // Temperature simulation
-        if (acOn) {
-            float diff = (float)desiredTemp - measuredTemp;
-            if (std::abs(diff) > 0.01f) {
-                measuredTemp += clampf(diff, -tempRate * dt, tempRate * dt);
-            }
-        }
+// Temperature simulation
+if (acOn) {
+    float diff = (float)desiredTemp - measuredTemp;
+    if (std::abs(diff) > 0.01f) {
+        measuredTemp += clampf(diff, -tempRate * dt, tempRate * dt);
+    }
+}
 
-        // Water fill + droplets
-        if (acOn) {
-            basinFillTimer += dt;
-            dropletSpawnTimer += dt;
+// Water fill + droplets
+if (acOn) {
+    basinFillTimer += dt;
+    dropletSpawnTimer += dt;
 
-            if (dropletSpawnTimer >= 0.20f) {
-                dropletSpawnTimer = 0.0f;
-                Droplet d;
-                d.pos = ventPos + glm::vec3((float)((rand() % 100) / 100.0 - 0.5) * 0.08f, 0.0f, 0.0f);
-                d.vel = glm::vec3(0.0f, -1.4f, 0.0f);
-                d.life = 4.0f;
-                droplets.push_back(d);
-            }
-            if (basinFillTimer >= 1.0f) {
-                basinFillTimer = 0.0f;
-                basinFill = std::min(1.0f, basinFill + 0.12f);
-            }
-        }
+    if (dropletSpawnTimer >= 0.20f) {
+        dropletSpawnTimer = 0.0f;
+        Droplet d;
+        d.pos = ventPos + glm::vec3((float)((rand() % 100) / 100.0 - 0.5) * 0.08f, 0.0f, 0.0f);
+        d.vel = glm::vec3(0.0f, -1.4f, 0.0f);
+        d.life = 4.0f;
+        droplets.push_back(d);
+    }
+    if (basinFillTimer >= 1.0f) {
+        basinFillTimer = 0.0f;
+        basinFill = std::min(1.0f, basinFill + 0.12f);
+    }
+}
 
-        // Compute basin bottom world Y (used for droplet collision/removal)
-        const float basinScaleY = 0.55f; // same scale used when rendering the basin
-        float basinBottomY;
-        if (basinState == BasinState::OnFloor) {
-            basinBottomY = basinPos.y + WATER_SURFACE_MIN_LOCAL * basinScaleY;
-        } else {
-            glm::vec3 right = glm::normalize(glm::cross(cameraFront, cameraUp));
-            glm::vec3 up = glm::normalize(cameraUp);
-            glm::vec3 handPos = cameraPos + cameraFront * 1.0f - right * 0.35f - up * 0.30f;
-            basinBottomY = handPos.y + WATER_SURFACE_MIN_LOCAL * basinScaleY;
-        }
+// Compute basin bottom world Y (used for droplet collision/removal)
+const float basinScaleY = 0.55f; // same scale used when rendering the basin
+float basinBottomY;
+if (basinState == BasinState::OnFloor) {
+    basinBottomY = basinPos.y + WATER_SURFACE_MIN_LOCAL * basinScaleY;
+} else {
+    glm::vec3 right = glm::normalize(glm::cross(cameraFront, cameraUp));
+    glm::vec3 up = glm::normalize(cameraUp);
+    glm::vec3 handPos = cameraPos + cameraFront * 1.0f - right * 0.35f - up * 0.30f;
+    basinBottomY = handPos.y + WATER_SURFACE_MIN_LOCAL * basinScaleY;
+}
 
-        const float dropletRadius = 0.05f; // same scale used when rendering droplets (scale 0.05)
-        // Droplet physics
-        for (auto& d : droplets) {
-            d.vel += glm::vec3(0.0f, -3.0f, 0.0f) * dt;
-            d.pos += d.vel * dt;
-            d.life -= dt;
+const float dropletRadius = 0.05f; // same scale used when rendering droplets (scale 0.05)
+// Droplet physics
+for (auto& d : droplets) {
+    d.vel += glm::vec3(0.0f, -3.0f, 0.0f) * dt;
+    d.pos += d.vel * dt;
+    d.life -= dt;
 
-            // clamp to just above basin bottom and mark dead to avoid visual overlap
-            if (d.pos.y < basinBottomY + dropletRadius) {
-                d.pos.y = basinBottomY + dropletRadius;
-                d.life = 0.0f; // will be removed below
-            }
-        }
+    // clamp to just above basin bottom and mark dead to avoid visual overlap
+    if (d.pos.y < basinBottomY + dropletRadius) {
+        d.pos.y = basinBottomY + dropletRadius;
+        d.life = 0.0f; // will be removed below
+    }
+}
 
-        // Remove expired droplets (including those that hit the bottom)
-        droplets.erase(std::remove_if(droplets.begin(), droplets.end(), [&](const Droplet& d) {
-            return d.life <= 0.0f;
-            }), droplets.end());
+// Remove expired droplets (including those that hit the bottom)
+droplets.erase(std::remove_if(droplets.begin(), droplets.end(), [&](const Droplet& d) {
+    return d.life <= 0.0f;
+    }), droplets.end());
 
-        // If basin full -> auto off + lock
-        if (!acLocked && basinFill >= 1.0f) {
-            acOn = false;
-            acLocked = true;
-            basinEmptied = false;
-            basinState = BasinState::OnFloor;
-        }
+// If basin full -> auto off + lock
+if (!acLocked && basinFill >= 1.0f) {
+    acOn = false;
+    acLocked = true;
+    basinEmptied = false;
+    basinState = BasinState::OnFloor;
+}
 
-        // Basin special actions when locked
-        if (acLocked && basinState == BasinState::InHands && spaceEdge) {
-            // PATCH 4: yaw-only facing (XZ)
-            glm::vec3 f = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
-            if (glm::length(f) < 0.0001f) f = glm::vec3(0, 0, -1);
-            glm::vec3 to = glm::normalize(glm::vec3(acPos.x - cameraPos.x, 0.0f, acPos.z - cameraPos.z));
-            if (glm::length(to) < 0.0001f) to = glm::vec3(0, 0, -1);
+// Basin special actions when locked
+if (acLocked && basinState == BasinState::InHands && spaceEdge) {
+    // PATCH 4: yaw-only facing (XZ)
+    glm::vec3 f = glm::normalize(glm::vec3(cameraFront.x, 0.0f, cameraFront.z));
+    if (glm::length(f) < 0.0001f) f = glm::vec3(0, 0, -1);
+    glm::vec3 to = glm::normalize(glm::vec3(acPos.x - cameraPos.x, 0.0f, acPos.z - cameraPos.z));
+    if (glm::length(to) < 0.0001f) to = glm::vec3(0, 0, -1);
 
-            float facing = glm::dot(f, to);
-            // facing < -0.8 => okrenut "iza" (oko 180°)
-            if (!basinEmptied && facing < -0.8f) {
-                basinFill = 0.0f;
-                basinEmptied = true;
-            }
-            // facing > 0.8 => gledamo ka klimi, možemo da vratimo lavor
-            else if (basinEmptied && facing > 0.8f) {
-                basinState = BasinState::OnFloor;
-                basinEmptied = false;
-                acLocked = false;
-            }
-        }
+    float facing = glm::dot(f, to);
+    // facing < -0.8 => okrenut "iza" (oko 180°)
+    if (!basinEmptied && facing < -0.8f) {
+        basinFill = 0.0f;
+        basinEmptied = true;
+    }
+    // facing > 0.8 => gledamo ka klimi, možemo da vratimo lavor
+    else if (basinEmptied && facing > 0.8f) {
+        basinState = BasinState::OnFloor;
+        basinEmptied = false;
+        acLocked = false;
+    }
+}
 
-        // Render
-        glViewport(0, 0, wWidth, wHeight);
-        glClearColor(0.07f, 0.07f, 0.09f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+// Render
+glViewport(0, 0, wWidth, wHeight);
+glClearColor(0.07f, 0.07f, 0.09f, 1.0f);
+glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 V = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-        glm::mat4 P = glm::perspective(glm::radians(fov), (float)wWidth / (float)wHeight, 0.1f, 100.0f);
-        glm::mat4 VP = P * V;
+glm::mat4 V = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+glm::mat4 P = glm::perspective(glm::radians(fov), (float)wWidth / (float)wHeight, 0.1f, 100.0f);
+glm::mat4 VP = P * V;
 
-        setCommonUniforms(VP);
+setCommonUniforms(VP);
 
-        // Lamp as a weak local light (red) when AC is ON.
-        // Keep lamp sphere emissive as before, but also provide its contribution to shading.
-        {
-            glm::vec3 lampLightColor = acOn ? glm::vec3(1.0f, 0.25f, 0.25f) : glm::vec3(0.0f);
-            float lampLightIntensity = acOn ? 0.35f : 0.0f; // "slabo" red light when on
+// Lamp as a weak local light (red) when AC is ON.
+// Keep lamp sphere emissive as before, but also provide its contribution to shading.
+{
+    glm::vec3 lampLightColor = acOn ? glm::vec3(1.0f, 0.25f, 0.25f) : glm::vec3(0.0f);
+    float lampLightIntensity = acOn ? 0.35f : 0.0f; // "slabo" red light when on
 
-            glUniform3fv(glGetUniformLocation(prog, "uLampPos"), 1, glm::value_ptr(lampPos));
-            glUniform3fv(glGetUniformLocation(prog, "uLampColor"), 1, glm::value_ptr(lampLightColor));
-            glUniform1f(glGetUniformLocation(prog, "uLampIntensity"), lampLightIntensity);
-        }
+    glUniform3fv(glGetUniformLocation(prog, "uLampPos"), 1, glm::value_ptr(lampPos));
+    glUniform3fv(glGetUniformLocation(prog, "uLampColor"), 1, glm::value_ptr(lampLightColor));
+    glUniform1f(glGetUniformLocation(prog, "uLampIntensity"), lampLightIntensity);
+}
 
-        // Compute basinM here once so transparent pass can access it too
-        glm::mat4 basinM(1.0f);
-        if (basinState == BasinState::OnFloor) {
-            basinM = glm::translate(basinM, basinPos);
-        }
-        else {
-            // in hands, in front of camera
-            glm::vec3 right = glm::normalize(glm::cross(cameraFront, cameraUp));
-            glm::vec3 up = glm::normalize(cameraUp);
-            glm::vec3 handPos = cameraPos + cameraFront * 1.0f - right * 0.35f - up * 0.30f;
-            basinM = glm::translate(basinM, handPos);
-            basinM = glm::rotate(basinM, glm::radians(-10.0f), right);
-        }
-        basinM = glm::scale(basinM, glm::vec3(0.75f, 0.55f, 0.75f));
+// Compute basinM here once so transparent pass can access it too
+glm::mat4 basinM(1.0f);
+if (basinState == BasinState::OnFloor) {
+    basinM = glm::translate(basinM, basinPos);
+}
+else {
+    // in hands, in front of camera
+    glm::vec3 right = glm::normalize(glm::cross(cameraFront, cameraUp));
+    glm::vec3 up = glm::normalize(cameraUp);
+    glm::vec3 handPos = cameraPos + cameraFront * 1.0f - right * 0.35f - up * 0.30f;
+    basinM = glm::translate(basinM, handPos);
+    basinM = glm::rotate(basinM, glm::radians(-10.0f), right);
+}
+basinM = glm::scale(basinM, glm::vec3(0.75f, 0.55f, 0.75f));
 
-        // OPAQUE PASS (all opaque objects / emissive but depth-writable)
-        // Floor
-        if (gShowFloor) {
-            glm::mat4 M(1.0f);
-            M = glm::translate(M, glm::vec3(0.0f, -0.01f, 0.0f));
-            M = glm::scale(M, glm::vec3(12.0f, 1.0f, 12.0f));
-            drawMesh(quad, M, VP, { 0.18f,0.18f,0.2f,1 }, false, 0, 1.0f, false);
-        }
+// OPAQUE PASS (all opaque objects / emissive but depth-writable)
+// Floor
+if (gShowFloor) {
+    glm::mat4 M(1.0f);
+    M = glm::translate(M, glm::vec3(0.0f, -0.01f, 0.0f));
+    M = glm::scale(M, glm::vec3(12.0f, 1.0f, 12.0f));
+    drawMesh(quad, M, VP, { 0.18f,0.18f,0.2f,1 }, false, 0, 1.0f, false);
+}
 
-        // AC body
-        {
-            glm::mat4 M(1.0f);
-            M = glm::translate(M, acPos);
-            M = glm::scale(M, glm::vec3(1.6f, 0.55f, 1.0f));
-            drawMesh(cube, M, VP, { 0.92f,0.92f,0.92f,1 }, false, 0, 1.0f, false);
-        }
+// AC body
+{
+    glm::mat4 M(1.0f);
+    M = glm::translate(M, acPos);
+    M = glm::scale(M, glm::vec3(1.6f, 0.55f, 1.0f));
+    drawMesh(cube, M, VP, { 0.92f,0.92f,0.92f,1 }, false, 0, 1.0f, false);
+}
 
-        // AC front panel (slightly darker)
-        {
-            glm::mat4 M(1.0f);
-            M = glm::translate(M, acPos + glm::vec3(0, 0, 0.55f));
-            M = glm::scale(M, glm::vec3(1.55f, 0.50f, 0.04f));
-            drawMesh(cube, M, VP, { 0.86f,0.86f,0.88f,1 }, false, 0, 1.0f, false);
-        }
+// AC front panel (slightly darker)
+{
+    glm::mat4 M(1.0f);
+    M = glm::translate(M, acPos + glm::vec3(0, 0, 0.55f));
+    M = glm::scale(M, glm::vec3(1.55f, 0.50f, 0.04f));
+    drawMesh(cube, M, VP, { 0.86f,0.86f,0.88f,1 }, false, 0, 1.0f, false);
+}
 
-        // Flap (hinge at bottom of front)
-        {
-            float angle = glm::radians(65.0f * flap);
-            glm::mat4 M(1.0f);
-            glm::vec3 hinge = acPos + glm::vec3(0.0f, -0.28f, 0.53f);
-            M = glm::translate(M, hinge);
-            M = glm::rotate(M, angle, glm::vec3(1, 0, 0));
-            M = glm::translate(M, glm::vec3(0.0f, -0.05f, 0.05f));
-            M = glm::scale(M, glm::vec3(1.3f, 0.10f, 0.25f));
-            drawMesh(cube, M, VP, { 0.78f,0.78f,0.80f,1 }, false, 0, 1.0f, false);
-        }
+// Flap (hinge at bottom of front)
+{
+    float angle = glm::radians(65.0f * flap);
+    glm::mat4 M(1.0f);
+    glm::vec3 hinge = acPos + glm::vec3(0.0f, -0.28f, 0.53f);
+    M = glm::translate(M, hinge);
+    M = glm::rotate(M, angle, glm::vec3(1, 0, 0));
+    M = glm::translate(M, glm::vec3(0.0f, -0.05f, 0.05f));
+    M = glm::scale(M, glm::vec3(1.3f, 0.10f, 0.25f));
+    drawMesh(cube, M, VP, { 0.78f,0.78f,0.80f,1 }, false, 0, 1.0f, false);
+}
 
-        // Lamp (emissive sphere)
-        {
-            glm::mat4 M(1.0f);
-            M = glm::translate(M, lampPos);
-            M = glm::scale(M, glm::vec3(lampRadius));
+// Lamp (emissive sphere)
+{
+    glm::mat4 M(1.0f);
+    M = glm::translate(M, lampPos);
+    M = glm::scale(M, glm::vec3(lampRadius));
 
-            glm::vec4 c = acOn
-                ? glm::vec4(1.0f, 0.25f, 0.25f, 1.0f)     // ON
-                : glm::vec4(0.35f, 0.35f, 0.35f, 1.0f);   // OFF
+    glm::vec4 c = acOn
+        ? glm::vec4(1.0f, 0.25f, 0.25f, 1.0f)     // ON
+        : glm::vec4(0.35f, 0.35f, 0.35f, 1.0f);   // OFF
 
-            drawMesh(lampSphere, M, VP, c, false, 0, 1.0f, true);
-        }
+    drawMesh(lampSphere, M, VP, c, false, 0, 1.0f, true);
+}
 
 
         // Screens (three emissive panels)
