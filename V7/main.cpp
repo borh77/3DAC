@@ -239,6 +239,90 @@ static Mesh makeCylinder(float radius, float height, int slices, glm::vec4 col,
 
     return createMesh(v, idx);
 }   
+// Insert this function after makeCylinder(...) in main.cpp
+
+static Mesh makeThickCylinder(float outerRadius, float innerRadius, float height, int slices, glm::vec4 col) {
+    // Creates a thick-walled cylinder (closed annular volume) with top/bottom caps.
+    // outerRadius > innerRadius required.
+    std::vector<Vertex> v;
+    std::vector<unsigned int> idx;
+
+    const float y0 = -height * 0.5f;
+    const float y1 = height * 0.5f;
+
+    // Generate ring vertices (duplicate last = first for easy indexing)
+    for (int i = 0; i <= slices; ++i) {
+        float t = (float)i / (float)slices;
+        float a = t * 2.0f * 3.1415926f;
+        float ox = std::cos(a) * outerRadius;
+        float oz = std::sin(a) * outerRadius;
+        glm::vec3 on = glm::normalize(glm::vec3(ox, 0.0f, oz));
+
+        float ix = std::cos(a) * innerRadius;
+        float iz = std::sin(a) * innerRadius;
+        glm::vec3 in = glm::normalize(glm::vec3(ix, 0.0f, iz));
+
+        // outer bottom, outer top, inner bottom, inner top
+        v.push_back({ {ox, y0, oz},  on, {t, 0}, col }); // outer bottom
+        v.push_back({ {ox, y1, oz},  on, {t, 1}, col }); // outer top
+        v.push_back({ {ix, y0, iz}, -in, {t, 0}, col }); // inner bottom (normal toward -radial)
+        v.push_back({ {ix, y1, iz}, -in, {t, 1}, col }); // inner top
+    }
+
+    // Build side faces (outer and inner)
+    for (int i = 0; i < slices; ++i) {
+        int base = i * 4;
+        int next = (i + 1) * 4;
+
+        int ob0 = base + 0; int ot0 = base + 1;
+        int ib0 = base + 2; int it0 = base + 3;
+        int ob1 = next + 0; int ot1 = next + 1;
+        int ib1 = next + 2; int it1 = next + 3;
+
+        // Outer side (front facing outward) - two triangles
+        idx.push_back(ob0); idx.push_back(ot0); idx.push_back(ot1);
+        idx.push_back(ob0); idx.push_back(ot1); idx.push_back(ob1);
+
+        // Inner side (front facing inward) - reverse winding so front faces inward
+        idx.push_back(ib0); idx.push_back(ib1); idx.push_back(it1);
+        idx.push_back(ib0); idx.push_back(it1); idx.push_back(it0);
+    }
+
+    // Top cap (annulus) at y1: connect outer top -> inner top
+    for (int i = 0; i < slices; ++i) {
+        int base = i * 4;
+        int next = (i + 1) * 4;
+
+        int ot0 = base + 1;
+        int ot1 = next + 1;
+        int it0 = base + 3;
+        int it1 = next + 3;
+
+        // When looking from +Y, triangles must be CCW -> outer -> outer_next -> inner_next
+        idx.push_back(ot0); idx.push_back(ot1); idx.push_back(it1);
+        idx.push_back(ot0); idx.push_back(it1); idx.push_back(it0);
+    }
+
+    // Bottom cap (annulus) at y0: connect inner bottom -> outer bottom (caps face -Y)
+    for (int i = 0; i < slices; ++i) {
+        int base = i * 4;
+        int next = (i + 1) * 4;
+
+        int ob0 = base + 0;
+        int ob1 = next + 0;
+        int ib0 = base + 2;
+        int ib1 = next + 2;
+
+        // For bottom (looking from -Y), keep CCW when looking along -Y:
+        // inner -> inner_next -> outer_next
+        idx.push_back(ib0); idx.push_back(ib1); idx.push_back(ob1);
+        idx.push_back(ib0); idx.push_back(ob1); idx.push_back(ob0);
+    }
+
+    validateWinding(v, idx, "thickCylinder");
+    enforceCCW(v, idx, "thickCylinder");
+    return createMesh(v, idx);
+}
 static Mesh makeDisk(float radius, int slices, glm::vec4 col, glm::vec3 normal, float y) {
     std::vector<Vertex> v;
     std::vector<unsigned int> idx;
@@ -572,9 +656,8 @@ glfwSetScrollCallback(window, scroll_callback);
     }
     Mesh lampSphere = makeSphere(1.0f, 10, 16, { 1,1,1,1 });
     Mesh dropletSphere = makeSphere(1.0f, 8, 12, { 1,1,1,1 });
-    // Šuplji cilindar = outer + inner sa različitim winding-om
-    //Mesh basinWallOuter = makeCylinder(1.0f, 1.0f, 32, { 0.75f,0.75f,0.75f,1 }, false, 0.0f, false, false);  // CCW
-    Mesh basinWallInner = makeCylinder(0.82f, 1.0f, 32, { 0.88f,0.88f,0.90f,1 }, false, 0.0f, true, true);   // CW, svetlija boja
+    // Thick-walled basin (outer + inner + caps)
+    Mesh basinWall = makeThickCylinder(1.00f, 0.82f, 1.0f, 32, { 0.88f,0.88f,0.90f,1 }); // solid thickness
 
     Mesh basinBottom = makeDisk(0.82f, 32, { 0.75f,0.75f,0.75f,1 }, { 0,1,0 }, -0.5f);
     
@@ -1116,27 +1199,27 @@ if (gShowFloor) {
             }
         }
 
-        // Basin (cylinder) - either on floor or in hands (opaque geometry - walls & bottom)
-{
-    if (gShowBasinWall) {
-        // HACK: Disable culling for basin only when depth test is enabled
-        // This ensures X toggle doesn't affect basin appearance when Z is ON
-        bool basinCullOverride = gDepthTest && gCullFace;
-        if (basinCullOverride) {
-            glDisable(GL_CULL_FACE);
+        // Basin (thick cylinder) - either on floor or in hands (opaque geometry - walls & bottom)
+        {
+            if (gShowBasinWall) {
+                // Basin needs two-sided rendering (inner + outer walls) ONLY when depth test is enabled.
+                // When depth test is OFF, X toggle should work normally on basin too.
+                GLboolean cullWas = glIsEnabled(GL_CULL_FACE);
+                if (gDepthTest && cullWas) {
+                    // Hack: disable culling for basin only when Z is ON
+                    glDisable(GL_CULL_FACE);
+                }
+                
+                drawMesh(basinWall, basinM, VP, { 0.88f,0.88f,0.90f,1 }, false, 0, 1.0f, false);
+                
+                // Restore culling state (only if we disabled it)
+                if (gDepthTest && cullWas) {
+                    glEnable(GL_CULL_FACE);
+                }
+            }
+            // bottom always drawn with normal culling
+            drawMesh(basinBottom, basinM, VP, { 0.75f,0.75f,0.75f,1 }, false, 0, 1.0f, false);
         }
-        
-        //drawMesh(basinWallOuter, basinM, VP, { 0.75f,0.75f,0.75f,1 }, false, 0, 1.0f, false);
-        drawMesh(basinWallInner, basinM, VP, { 0.88f,0.88f,0.90f,1 }, false, 0, 1.0f, false);
-        
-        // Restore culling state
-        if (basinCullOverride) {
-            glEnable(GL_CULL_FACE);
-        }
-    }
-    // bottom always drawn with normal culling
-    drawMesh(basinBottom, basinM, VP, { 0.75f,0.75f,0.75f,1 }, false, 0, 1.0f, false);
-}
 
         // Toilet behind (simple block model)
         {
@@ -1288,7 +1371,7 @@ if (gShowFloor) {
     destroyMesh(lampSphere);
     destroyMesh(dropletSphere);
     //destroyMesh(basinWallOuter);
-    destroyMesh(basinWallInner);
+    destroyMesh(basinWall);
     destroyMesh(basinBottom);
     destroyMesh(waterCyl);
     destroyMesh(waterTop);
